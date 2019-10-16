@@ -1,0 +1,148 @@
+#include <stdlib.h>
+#include <libgen.h>
+#include <stdio.h>
+#include <errno.h>
+#include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/time.h>
+#include <sys/select.h>
+#include <sys/types.h>
+#include <sys/mman.h>
+
+const int BUFFER_SIZE = 5; /*made sure that buffer > string lengths on average
+				(the task is specified for short strings)*/
+
+typedef struct{
+    int fd;
+    size_t lines_count;
+    size_t offset[50];
+    size_t size[50];
+    char* text;
+} OffsetTable;
+
+
+
+OffsetTable* read_file(const char* name){
+    OffsetTable* file = (OffsetTable*) malloc(sizeof(OffsetTable));
+    if (!file) {
+        return NULL;
+    }
+    file->fd = open(name, O_RDWR);
+    /*printf("fd = %d\n", file->fd);*/
+    if (file->fd == -1) {
+	printf("read file: error on opening the file\n");
+        free(file);
+        return NULL;
+    }
+
+    file->lines_count = 1;
+    file->offset[0] = 0;
+    char buf[BUFFER_SIZE];
+    size_t i = 0, line_offset = 0;
+    size_t file_size = lseek(file->fd, 0, SEEK_END);
+    void* mmap_ptr = NULL;
+    char* mmap_cptr = (char*) mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, file->fd, 0);
+    
+    
+    if (strlen(mmap_cptr) > 0) {
+	char* ch = NULL;
+        for (ch = mmap_cptr; ch < mmap_cptr + file_size; ch++){
+            i++;
+            if (*ch == '\n') {
+                file->size[file->lines_count-1] = i;
+                line_offset += i;
+                file->offset[file->lines_count] = line_offset;
+                file->lines_count++;
+                i = 0;
+            }
+
+        }
+       
+    }
+    file->text = mmap_cptr;
+    return file;
+}
+
+int print_file(OffsetTable* file) {
+	if(file!=NULL){
+		printf("full_file is:\n%s\n", file->text);	
+		return 0;
+	}	
+	
+}
+
+
+int main(int argc, char** argv)
+
+{
+    if (argc != 2){
+        printf("usage: \n");
+        return 0;
+    }
+
+    OffsetTable* file = read_file(argv[1]);
+    if (file == NULL) {
+        perror("READ_FILE: unsucceeded reading\n");
+        return 0;
+    }
+    size_t string_number;
+
+    /*file descriptors to watch if available to read and setting stdin to track changes*/
+    fd_set read_fds;
+    FD_ZERO(&read_fds);
+    FD_SET(STDIN_FILENO, &read_fds);
+    /*time to wait - 5 sec*/
+    struct timeval t_wait;
+    
+    do {  
+
+	printf("Line number: ");
+        fflush(stdout);
+
+	
+	t_wait.tv_sec = 5; /*resetting the timeout*/
+	t_wait.tv_usec = 0;
+	int select_code = select(STDIN_FILENO + 1, &read_fds, NULL, NULL, &t_wait);
+
+	if(select_code == 0 /*waited the timeout*/) {
+		printf("\n");
+		int if_printed_ok = print_file(file);
+		close(file->fd);
+		free(file);
+		return if_printed_ok;
+	}
+	else if(select_code == -1) {
+		perror ("SELECT: error\n");
+		return -1;
+	}
+	else if(select_code == 1) {
+		scanf("%d", &string_number);
+	}
+
+        if (file->lines_count < string_number) {
+            printf("Line was not found\n");
+            break;
+        }
+        else{
+
+            size_t len = file->size[string_number-1];
+	    size_t full_offset = file->offset[string_number - 1];
+	    printf("full_offset: %zu, len: %zu\n", full_offset, len);
+
+	    
+	    char* left_border = file->text+full_offset;
+	    char* right_border = file->text+full_offset+len;
+
+	    char* ch = NULL;
+	    for(ch = left_border; ch!= right_border; ++ch) {
+		    printf ("%c", *ch);
+	    }
+		   
+        }
+
+    }while (string_number > 0);
+    close(file->fd);
+    free(file);
+    return 0;
+}
