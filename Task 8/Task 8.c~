@@ -1,0 +1,100 @@
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <stdio.h>
+#include <fcntl.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/time.h>
+#include <sys/select.h>
+
+#define USAGE_ERR -1
+#define OPEN_ERR -2
+#define LOCK_ERR -3
+#define LNCH_EDITOR_ERR -4
+#define UNLCK_ERR -5
+#define CLOSE_ERR -6
+#define ALLOC_ERR -7
+#define SELECT_ERR -8
+
+int main(int argc, char*argv[]) {
+	if(argc!=3){
+		perror("Example usage: Task\ 8 vim filename.txt\n");
+		return USAGE_ERR;
+	}
+	int fd = open(argv[2], O_RDWR);
+	if(fd == -1) {
+		perror("Error while opening the file\n");
+		return OPEN_ERR;
+	}
+	
+	/*locking the whole file -> l_whence = SEEK_SET*/
+
+	struct flock flock_;
+	flock_.l_type = F_WRLCK; /*write locking*/
+	flock_.l_whence = SEEK_SET;
+	flock_.l_start = 0;
+	flock_.l_len = 0; /*locking the whole file*/
+	
+	int lock_code = fcntl(fd, F_SETLK, &flock_);
+	if(lock_code == -1) {
+		perror("error while locking the file\n");
+		return LOCK_ERR;
+	}
+
+	char* gap = " ";
+	char* buf = malloc(300 * sizeof(char));
+	if(!buf)
+		return ALLOC_ERR;
+	buf = strcat(buf, argv[1]);
+	buf = strcat(buf, gap);
+	buf = strcat(buf, argv[2]);
+
+	//printf("LOG: %s\n", buf);
+
+	int exec_res = system(buf);
+	free(buf);
+	if(exec_res == -1) {
+		perror("Error while launching the editor\n");
+		return LNCH_EDITOR_ERR;
+	}
+
+	fd_set read_fds;
+	FD_ZERO(&read_fds);
+    	FD_SET(fd, &read_fds);
+        struct timeval t_wait;
+	
+	t_wait.tv_sec = 30; 
+	t_wait.tv_usec = 0;
+
+	int select_code = select(fd + 1, &read_fds, NULL, NULL, &t_wait);
+	
+	if(select_code == 0 /*timeout*/){
+		
+	}
+	else if(select_code == -1) {
+		perror ("SELECT: error\n");
+		return SELECT_ERR;
+	}
+	else if(select_code == 1) {
+		printf("LOG: caught changes in file\n");
+		
+	}
+
+	/*unlocking*/
+	flock_.l_type = F_UNLCK;
+	int unlock_code = fcntl(fd, F_SETLK, &flock_);
+	if(unlock_code == -1) {
+		perror("Error while unlocking the file\n");
+		return UNLCK_ERR;
+	}
+	
+	int close_code = close(fd);
+	if(close_code) {
+		perror("Error while closing the file\n");
+		return CLOSE_ERR;
+	}
+
+	return 0;
+
+}
