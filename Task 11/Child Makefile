@@ -1,0 +1,2 @@
+All:
+	gcc -o Child Child.c
