@@ -1,0 +1,70 @@
+#include <stdio.h>
+#include <termios.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <string.h>
+
+#define OPEN_ERR -1
+#define TC_GET_ERR -2
+#define TC_SET_ERR -3
+#define WRITE_ERR -4
+#define READ_ERR -5
+
+int main() {
+
+	int trm = open("/dev/tty", O_RDWR);
+	if(trm == -1) {
+		perror("ERROR:terminal opening\n");
+		return OPEN_ERR;
+	}
+
+	struct termios old_opt;
+	struct termios new_opt;
+	
+	if(tcgetattr(trm, &old_opt) == -1) {
+		perror("ERROR:getting old options\n");
+		close(trm);
+		return TC_GET_ERR;
+	}
+	
+	new_opt = old_opt;
+
+	/*clearing the flag for canonic input-output*/
+	new_opt.c_lflag &= ~(ICANON); //Irtegov mans
+	new_opt.c_cc[VMIN] = 1; /*min symbols count*/
+	new_opt.c_cc[VTIME] = 0; /*min time to wait*/
+
+	if(tcsetattr(trm, TCSANOW, &new_opt) == -1) { /*TCSANOW - apply immediately*/
+		perror("ERROR: tcsetattr");
+		close(trm);
+		return TC_SET_ERR;
+	}
+	
+	char buf[1];
+	char str[] = "Do you want to live? : y|n:";
+	if(write(trm, str, strlen(str)) == -1) {
+		perror("ERR:write\n");
+		close(trm);
+		return WRITE_ERR;
+	}
+	if(read(trm, buf, 1) == -1) {
+		perror("ERR:read\n");
+		close(trm);
+		return READ_ERR;
+	}
+	
+	if(*buf == 'y' || *buf == 'Y'){
+		printf("\nWow!\n");
+	}
+	else if(*buf == 'n' || *buf == 'N') {
+		printf("\nWow! Cool!\n");
+	}
+	else {
+		printf("\nCan't discern the answer\n");
+	}
+	close(trm);
+	return 0;
+
+}
