@@ -15,21 +15,7 @@
 extern char **environ;
 
 void test_env(const char * arg){
-	printf("LOG: inside test_env: arg = %s\n", arg);
-	char* env;
-	env = getenv(arg);
-	if(env == NULL) {
-		printf("LOG: No env variable!\n");
-	}
-	printf("LOG:env variable = %s\n", env);
-}
-
-int main(int argc, char * argv[]){
-
-	printf("LOG::child execution in child image process\n");
-	int count = 0;
-	test_env("PATH");
-	test_env("MYVAR");
+	
 	
 	return 0;
 }
