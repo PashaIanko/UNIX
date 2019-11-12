@@ -19,42 +19,7 @@ int main(int argc, char * argv[]){
 	}
 	
 	
-	pid_t child_process = fork();
-	/*child and parent execute simultaneously now*/
 
-	if(child_process == -1){
-		perror("Creating child process error\n");
-		return CHILD_ERR;
-	}
-	else if(child_process == 0) {
-		printf("LOG: child execution\n");
-		/*zero is returned to the newly created
-			child process -> execute system(cmd)*/
-		int exec = execvp(argv[1], &argv[1]);
-		if(exec == -1) {
-			perror("Executing child process error\n");
-			return CHILD_EXEC_ERR;
-		}
-	}
-	if(child_process > 0){
-		/*positive value is returned to the parent process*/
-		printf("LOG: parent execution\n");
-
-		
-		int status;
-		pid_t wait_code = wait(&status);  /*calling process is suspended,
-				waiting for the children termination */
-		if(wait_code == -1) {
-			perror("Waiting the child error\n");
-			return WAIT_ERR;
-		}
-		if(WIFEXITED(status)){
-			printf("Last string output by parent\n");
-		}
-		else {
-			printf("LOG:Unexpected child termination (not by return)\n");
-		}
-	}
 
 	return 0;
 }
