@@ -7,8 +7,9 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <ctype.h>
 
-
+#define CONSOLE_BUF_SIZE 10
 #define BUF_SIZE 1024
 #define USAGE_ERR -1
 #define INVALID_SOCK -5
@@ -202,9 +203,9 @@ size_t fetch_response(int sockfd, char *response, int response_size)
 	size_t how_much_received = 0;
 	size_t numb_of_strings = 0;
 
-	fd_set	readfds;
-	FD_ZERO(&readfds);
-	FD_SET(STDIN_FILENO, &readfds);
+	//fd_set	readfds;
+	//FD_ZERO(&readfds);
+	//FD_SET(STDIN_FILENO, &readfds);
 	
 	while (1) {
 
@@ -224,14 +225,21 @@ size_t fetch_response(int sockfd, char *response, int response_size)
 			printf("LOG: numb_of_strings = %u\n", numb_of_strings);
 			printf("%s", data);
 			if(numb_of_strings >= STRINGS_NUMB) {
+				char console_buf[CONSOLE_BUF_SIZE] ;
+
 				printf("\nPress space to scroll\n");
+				fd_set	readfds;
 				FD_ZERO(&readfds);
 				FD_SET(STDIN_FILENO, &readfds);
 				int changed_fds = select(STDIN_FILENO + 1, &readfds, NULL, NULL, NULL);
 				if(FD_ISSET(STDIN_FILENO, &readfds)) {
-					printf("LOG: caught space\n");
-					numb_of_strings = 0;
-					continue;
+					ssize_t bytes_read = read(STDIN_FILENO, console_buf, CONSOLE_BUF_SIZE);
+					if(isspace(console_buf[0]) && bytes_read == 1) {
+						printf("LOG: caught space\n");
+						numb_of_strings = 0;
+						continue;
+					} 
+					
 				}
 				
 			}
