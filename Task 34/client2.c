@@ -8,16 +8,18 @@
 
 #define BUF_SIZE 1000
 #define NUMB_SENDS 3
+#define RECV_SIZE 1024
 
 #define SOCKET_ERR -2
 #define CONNECT_ERR -3
 #define CLOSE_ERR -4
 
+
 int main () {
 	struct sockaddr_un address;
 	int sock = 0, bytes_written = 0;
 
-	char * msg = "SECOND CLIENT SECOND CLIENT\n";
+	char * msg = "I am SECOND client sending this message!";
 	char * path = "tmp_file"; /*analogical to pipe - communication
 					between server and client*/
 	char buffer[BUF_SIZE] = {0};
@@ -40,16 +42,18 @@ int main () {
 		return CONNECT_ERR;
 	}
 
-	printf ("LOG: client sending\n");
+	printf ("LOG: client2 sending\n");
+	send(sock, msg, strlen(msg), 0);
 
-	size_t i = 0;
-	for(; i<NUMB_SENDS;i++){
-		send(sock, msg, strlen(msg), 0);
-	}
-	
+	printf("LOG: receiving\n");
+	char data[RECV_SIZE];
+
+	ssize_t bytes_received = recv(sock, data, RECV_SIZE, 0);
+	data[bytes_received] = '\0';
+	printf("Client2 received back, msg = %s\n", data);
 	
 	if(close(sock) < 0){
-		perror("Error while closing the client socket\n");
+		perror("Error while closing the client2 socket\n");
 		return CLOSE_ERR;
 	}
 	return 0;

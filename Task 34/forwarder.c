@@ -157,7 +157,6 @@ char* full_read(int sd){
 		if(bytes_read <= BUF_SIZE)
 			break;
 	}
-	printf("LOG: before return\n");
 	return res_str;
 }
 
@@ -301,9 +300,9 @@ int main (int argc, char* argv[]) {
 				int echo_sock = client_socket[counter].serv_sock;
 				printf("LOG: echo_sock = %d\n", echo_sock);
 				ssize_t sent_bytes = send(echo_sock, read_msg, strlen(read_msg), 0);
-				printf("translator sent %u bytes\n", sent_bytes);
-//				close(sd);
-				//client_socket[counter].client_sock = INVALID;
+				printf("forwarder sent to %d echo socket %u bytes\n", 
+								echo_sock, sent_bytes);
+
 				free(read_msg);
 			}
 
@@ -312,13 +311,12 @@ int main (int argc, char* argv[]) {
 				char* read_msg = full_read(serv_sd); //allocs memory for string
 			
 				/*echo read_msg back*/
-				printf("LOG: translator got echo = %s\n", read_msg);
+				printf("LOG: forwarder got echo = %s\n", read_msg);
 				int client_sock = client_socket[counter].client_sock;
-				printf("LOG: gonna send to socket = %d\n", client_sock);
+				printf("LOG: forwarder gonna send to client socket = %d\n", client_sock);
 				ssize_t sent_bytes = send(client_sock, read_msg, strlen(read_msg), 0);
-				printf("translator sent %u bytes\n", sent_bytes);
-				//close(serv_sd);
-				//client_socket[counter].serv_sock = INVALID;
+				printf("forwarder sent to client socket %d %u bytes\n", 
+					client_sock, sent_bytes);
 				free(read_msg);
 			}
 		}

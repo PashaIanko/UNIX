@@ -120,10 +120,14 @@ char* full_read(int sd){
 	size_t bytes_read = 0;
 	
 
-	memset(&buffer, 1, BUF_SIZE);
-	bytes_read = read(sd, buffer, BUF_SIZE);
-	strncat(res_str, &buffer, bytes_read);
-	/*while(bytes_read != 0) {
+	memset(&buffer, '1', BUF_SIZE);
+	
+	while(1) {
+		bytes_read = read(sd, buffer, BUF_SIZE);
+		printf("LOG: read %u bytes\n", bytes_read);
+		if(bytes_read == 0) {
+			break;
+		}
 		how_much_read += bytes_read;
 		
 		if(how_much_read > res_len)
@@ -132,17 +136,13 @@ char* full_read(int sd){
 			res_len = res_len + PORTION;
 			res_str = realloc(res_str, res_len);
 		}
+		buffer[bytes_read] = '\0';
 		strncat(res_str, &buffer, bytes_read);
 		printf("res_str = %s\n", res_str);
-		if(bytes_read == 0 || string_terminated(&buffer, BUF_SIZE)) {
-			printf("LOG:INSIDE BREAK\n");
+		if(bytes_read <= BUF_SIZE)
 			break;
-		}
-		memset(&buffer, 0, BUF_SIZE);
-		bytes_read = read(sd, buffer, BUF_SIZE);
-		printf("LOG: bytes_read = %u\n", bytes_read);
-		
-	}*/
+	}
+	printf("LOG: before return\n");
 	return res_str;
 }
 
