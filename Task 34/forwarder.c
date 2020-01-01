@@ -67,6 +67,9 @@ int set_valid_descriptors(sock_pair* client_socket_arr, size_t arr_size, fd_set*
 			max_sd = max_sd_pair;
 		}
 	}
+	if(max_sd == 0){
+		printf("LOG: forwarder has no valid descriptors\n");
+	}
 	return max_sd;
 }
 
@@ -139,10 +142,10 @@ char* full_read(int sd){
 	char res_big_buf[BIG_SIZE] = {'\0'}; 
 	while(1) {
 		bytes_read = read(sd, buffer, BUF_SIZE);
-		printf("LOG: read %u bytes\n", bytes_read);
+		//printf("LOG: read %u bytes\n", bytes_read);
 
 		if(bytes_read == 0) {
-			printf("LOG: read 0 bytes\n");
+			//printf("LOG: read 0 bytes\n");
 			break;
 		}
 		how_much_read += bytes_read;
@@ -150,7 +153,7 @@ char* full_read(int sd){
 		strncat(res_big_buf, buffer, bytes_read);
 
 		if(string_terminated(buffer, bytes_read + 1)) {
-			printf("LOG: string terminated\n");
+			//printf("LOG: string terminated\n");
 			break;
 		}
 	}
@@ -159,7 +162,7 @@ char* full_read(int sd){
 	if(res_ptr != NULL) {
 		strncpy(res_ptr, res_big_buf, strlen(res_big_buf));
 	}
-	printf("LOG: return str = %s from full_read\n", res_ptr);
+	//printf("LOG: return str = %s from full_read\n", res_ptr);
 	return res_ptr;
 }
 
@@ -317,9 +320,20 @@ client_socket[%u].client_sock = %d\n", add_idx, client_socket[add_idx].client_so
 				"LOG: forwarder gonna send to client_socket[%d].client_sock=%d msg = %s\n", 
 							counter, client_sock, read_msg);
 				ssize_t sent_bytes = send(client_sock, read_msg, strlen(read_msg), 0);
-				printf("forwarder sent to client_socket[%d]client_sock=%d %u bytes\n", 
+				printf("forwarder sent to client_socket[%d].client_sock=%d %u bytes\n", 
 					counter, client_sock, sent_bytes);
 				free(read_msg);
+	
+				/*closing after sending back*/
+		
+				printf("forwarder closed client_socket[%u].client_sock=%d and client_socket[%u].serv_sock=%d after sending back to client\n", 
+					counter, client_socket[counter].client_sock,
+					counter, client_socket[counter].serv_sock);
+				close(client_sock);
+				close(serv_sd);
+				client_socket[counter].client_sock = INVALID;
+				client_socket[counter].serv_sock = INVALID;
+	
 			}
 		}
 

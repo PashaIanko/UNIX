@@ -42,7 +42,7 @@ int main () {
 		return CONNECT_ERR;
 	}
 
-	printf ("LOG: client2 sending\n");
+	printf ("LOG: client sending\n");
 	send(sock, msg, strlen(msg), 0);
 
 	printf("LOG: receiving\n");
@@ -50,10 +50,10 @@ int main () {
 
 	ssize_t bytes_received = recv(sock, data, RECV_SIZE, 0);
 	data[bytes_received] = '\0';
-	printf("Client2 received back, msg = %s\n", data);
+	printf("Client received back, msg = %s\n", data);
 	
 	if(close(sock) < 0){
-		perror("Error while closing the client2 socket\n");
+		perror("Error while closing the client socket\n");
 		return CLOSE_ERR;
 	}
 	return 0;

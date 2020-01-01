@@ -128,10 +128,10 @@ char* full_read(int sd){
 	char res_big_buf[BIG_SIZE] = {'\0'}; 
 	while(1) {
 		bytes_read = read(sd, buffer, BUF_SIZE);
-		printf("LOG: read %u bytes\n", bytes_read);
+		//printf("LOG: read %u bytes\n", bytes_read);
 
 		if(bytes_read == 0) {
-			printf("LOG: read 0 bytes\n");
+			//printf("LOG: read 0 bytes\n");
 			break;
 		}
 		how_much_read += bytes_read;
@@ -139,7 +139,7 @@ char* full_read(int sd){
 		strncat(res_big_buf, buffer, bytes_read);
 
 		if(string_terminated(buffer, bytes_read + 1)) {
-			printf("LOG: string terminated\n");
+			//printf("LOG: string terminated\n");
 			break;
 		}
 	}
@@ -148,7 +148,7 @@ char* full_read(int sd){
 	if(res_ptr != NULL) {
 		strncpy(res_ptr, res_big_buf, strlen(res_big_buf));
 	}
-	printf("LOG: return str = %s from full_read\n", res_ptr);
+	//printf("LOG: return str = %s from full_read\n", res_ptr);
 	return res_ptr;
 }
 
@@ -222,10 +222,8 @@ int main (int argc, char* argv[]) {
 		if(max_sd_tmp > max_sd) {
 			max_sd = max_sd_tmp;
 		}	
-		printf("LOG: echo_serv before select, max_sd = %d\nmaster_sock = %d", 
-									max_sd, master_socket);	
+		printf("LOG: echo_serv waiting for clients");	
 		active_fds = select(max_sd + 1, &readfds, NULL, NULL, NULL);
-		printf("LOG: echo_serv after select\n");	
 		if(active_fds < 0 && (errno != EINTR)) {
 			printf("Select error!\n");
 			unlink(path);
@@ -250,7 +248,7 @@ int main (int argc, char* argv[]) {
 			}
 			/*adding incoming socket*/
 			size_t add_idx = add_new_socket(incoming_socket, &client_socket, MAX_CLIENTS);
-			printf("LOG: Echo ser added new sock, client_socket[%u]=%d",
+			printf("LOG: Echo ser added new sock, client_socket[%u]=%d\n",
 						add_idx, client_socket[add_idx]);
 		}
 
@@ -264,7 +262,7 @@ int main (int argc, char* argv[]) {
 				char* read_msg = full_read(sd); 
 			
 				/*echo read_msg back*/
-				printf("Echo server will echo str = %s\n to sd = %d", read_msg, sd);
+				printf("Echo server will echo str = %s\n to sd = %d\n", read_msg, sd);
 				ssize_t sent_bytes = send(sd, read_msg, strlen(read_msg), 0);
 				printf("Echo server sent %u bytes\n", sent_bytes);
 				close(sd);
