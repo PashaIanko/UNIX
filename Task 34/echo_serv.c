@@ -21,6 +21,7 @@
 #define BACKLOG 3
 #define SEC_TIMEOUT 3
 #define BUF_SIZE 500
+#define BIG_SIZE 3072
 #define INVALID -1
 #define FALSE_ 0
 #define TRUE_ 1
@@ -47,11 +48,15 @@ int set_valid_descriptors(int* client_socket_arr, size_t arr_size, fd_set* readf
 		sd = client_socket_arr[i];
 		
 		if(sd > 0) {
+			printf("Echo serv has valid socket client_socket_arr[%u]=%d", i, sd);
 			FD_SET(sd, readfds);
 		}
 		if(sd > max_sd) {
 			max_sd = sd;
 		}
+	}
+	if(max_sd == 0){
+		printf("LOG: echo_serv has no valid descriptors\n");
 	}
 	return max_sd;
 }
@@ -66,16 +71,17 @@ int all_invalid(int* client_sock_arr, size_t size) {
 	return TRUE_;
 }
 
-void add_new_socket(int new_sd, int* client_socket, size_t size) {
+size_t add_new_socket(int new_sd, int* client_socket, size_t size) {
 	if(client_socket != NULL) {
 		size_t i = 0;
 		for(; i < size; i++) {
 			if(client_socket[i] == INVALID) {
 				client_socket[i] = new_sd;
-				return;
+				return i;
 			}
 		}
 	}
+	return (size_t)-1;
 }
 
 int fd[2];
@@ -96,7 +102,6 @@ void close_clients(int* client_socket, size_t size) {
 }
 
 int string_terminated(char* buffer, size_t size) {
-	printf("LOG: inside string teminated, i = %u, buffer = %s\n\n", size, buffer);
 	size_t i = 0;
 	for(;i<size; i++) {
 		if(buffer[i] == '\0') {
@@ -119,31 +124,32 @@ char* full_read(int sd){
 	size_t how_much_read = 0;
 	size_t bytes_read = 0;
 	
-
 	memset(&buffer, '1', BUF_SIZE);
-	
+	char res_big_buf[BIG_SIZE] = {'\0'}; 
 	while(1) {
 		bytes_read = read(sd, buffer, BUF_SIZE);
 		printf("LOG: read %u bytes\n", bytes_read);
+
 		if(bytes_read == 0) {
+			printf("LOG: read 0 bytes\n");
 			break;
 		}
 		how_much_read += bytes_read;
-		
-		if(how_much_read > res_len)
-		{
-			printf("inside realloc\n");
-			res_len = res_len + PORTION;
-			res_str = realloc(res_str, res_len);
-		}
 		buffer[bytes_read] = '\0';
-		strncat(res_str, &buffer, bytes_read);
-		printf("res_str = %s\n", res_str);
-		if(bytes_read <= BUF_SIZE)
+		strncat(res_big_buf, buffer, bytes_read);
+
+		if(string_terminated(buffer, bytes_read + 1)) {
+			printf("LOG: string terminated\n");
 			break;
+		}
 	}
-	printf("LOG: before return\n");
-	return res_str;
+
+	char* res_ptr = malloc(strlen(res_big_buf));
+	if(res_ptr != NULL) {
+		strncpy(res_ptr, res_big_buf, strlen(res_big_buf));
+	}
+	printf("LOG: return str = %s from full_read\n", res_ptr);
+	return res_ptr;
 }
 
 int main (int argc, char* argv[]) {
@@ -193,12 +199,11 @@ int main (int argc, char* argv[]) {
 	signal (SIGINT, quit);	
 
 	printf("Echo server waiting for clients\n");		
-	int	max_sd; //for the highest fd (for select() argument)
-	int	sd; //socket_descriptor
+	int	max_sd; 
+	int	sd; 
 	int	active_fds;
 	int 	incoming_socket;
 	int	addrlen = sizeof(address);
-	struct 	timeval t_wait;
 	ssize_t	bytes_read;
 	char	buffer[BUF_SIZE];
 	int 	pipe_fd = fd[READ];
@@ -212,15 +217,15 @@ int main (int argc, char* argv[]) {
 		
 		max_sd = master_socket;		
 
-		t_wait.tv_sec = SEC_TIMEOUT; 
-		t_wait.tv_usec = 0;
-
 		/*set valid socket descriptors*/
 		int max_sd_tmp = set_valid_descriptors(&client_socket, MAX_CLIENTS, &readfds);
 		if(max_sd_tmp > max_sd) {
 			max_sd = max_sd_tmp;
-		}		
-		active_fds = select(max_sd + 1, &readfds, NULL, NULL, NULL/*&t_wait*/);
+		}	
+		printf("LOG: echo_serv before select, max_sd = %d\nmaster_sock = %d", 
+									max_sd, master_socket);	
+		active_fds = select(max_sd + 1, &readfds, NULL, NULL, NULL);
+		printf("LOG: echo_serv after select\n");	
 		if(active_fds < 0 && (errno != EINTR)) {
 			printf("Select error!\n");
 			unlink(path);
@@ -228,7 +233,6 @@ int main (int argc, char* argv[]) {
 		}
 			
 		if(FD_ISSET(pipe_fd, &readfds)) {
-			//printf("LOG: caught signal - closing clients\n");
 			close_clients(&client_socket, MAX_CLIENTS);
 			unlink(path);
 			return 0;
@@ -245,18 +249,22 @@ int main (int argc, char* argv[]) {
 				return ACCEPT_ERR;
 			}
 			/*adding incoming socket*/
-			add_new_socket(incoming_socket, &client_socket, MAX_CLIENTS);
+			size_t add_idx = add_new_socket(incoming_socket, &client_socket, MAX_CLIENTS);
+			printf("LOG: Echo ser added new sock, client_socket[%u]=%d",
+						add_idx, client_socket[add_idx]);
 		}
 
 
 		size_t counter = 0;
 		for(; counter < MAX_CLIENTS; counter++) {
-			sd = client_socket[counter]; //socket_id
+			sd = client_socket[counter]; 
 			if(FD_ISSET(sd, &readfds)) {
-				char* read_msg = full_read(sd); //allocs memory for string
+				printf("LOG: echo serv got data to read from client_sock[%u]=%d\n",
+						counter, sd);
+				char* read_msg = full_read(sd); 
 			
 				/*echo read_msg back*/
-				printf("Echo server will echo str = %s\n", read_msg);
+				printf("Echo server will echo str = %s\n to sd = %d", read_msg, sd);
 				ssize_t sent_bytes = send(sd, read_msg, strlen(read_msg), 0);
 				printf("Echo server sent %u bytes\n", sent_bytes);
 				close(sd);

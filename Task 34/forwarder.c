@@ -22,6 +22,7 @@
 #define BACKLOG 3
 #define SEC_TIMEOUT 3
 #define BUF_SIZE 500
+#define BIG_SIZE 3072
 #define INVALID -1
 #define FALSE_ 0
 #define TRUE_ 1
@@ -134,30 +135,32 @@ char* full_read(int sd){
 	size_t how_much_read = 0;
 	size_t bytes_read = 0;
 	
-
 	memset(&buffer, '1', BUF_SIZE);
-	
+	char res_big_buf[BIG_SIZE] = {'\0'}; 
 	while(1) {
 		bytes_read = read(sd, buffer, BUF_SIZE);
 		printf("LOG: read %u bytes\n", bytes_read);
+
 		if(bytes_read == 0) {
+			printf("LOG: read 0 bytes\n");
 			break;
 		}
 		how_much_read += bytes_read;
-		
-		if(how_much_read > res_len)
-		{
-			printf("inside realloc\n");
-			res_len = res_len + PORTION;
-			res_str = realloc(res_str, res_len);
-		}
 		buffer[bytes_read] = '\0';
-		strncat(res_str, &buffer, bytes_read);
-		printf("res_str = %s\n", res_str);
-		if(bytes_read <= BUF_SIZE)
+		strncat(res_big_buf, buffer, bytes_read);
+
+		if(string_terminated(buffer, bytes_read + 1)) {
+			printf("LOG: string terminated\n");
 			break;
+		}
 	}
-	return res_str;
+
+	char* res_ptr = malloc(strlen(res_big_buf));
+	if(res_ptr != NULL) {
+		strncpy(res_ptr, res_big_buf, strlen(res_big_buf));
+	}
+	printf("LOG: return str = %s from full_read\n", res_ptr);
+	return res_ptr;
 }
 
 
@@ -182,14 +185,10 @@ int main (int argc, char* argv[]) {
 	}
 
 	struct sockaddr_un address;
-	/*null struct*/
 	memset(&address, 0, sizeof(address));
-
-	/*address family*/
 	address.sun_family = AF_UNIX;
-	
 	char * path = "tmp_file";
-	strcpy(address.sun_path, path); /*temp file for communication*/
+	strcpy(address.sun_path, path); 
 
 	int if_binded = bind(master_socket, (struct sockaddr*)&address, sizeof(address));
 	if(if_binded < 0) {
@@ -209,18 +208,15 @@ int main (int argc, char* argv[]) {
 	signal (SIGINT, quit);	
 
 	printf("Forwarder waiting for clients\n");		
-	int	max_sd; //for the highest fd (for select() argument)
-	int	sd; //socket_descriptor
+	int	max_sd; 
+	int	sd; 
 	int	active_fds;
 	int 	incoming_socket;
 	int	addrlen = sizeof(address);
-	struct 	timeval t_wait;
 	ssize_t	bytes_read;
 	char	buffer[BUF_SIZE];
 	int 	pipe_fd = fd[READ];
-
-	//printf("LOG: pipe_fd = %d\nmaster socket = %d\n", pipe_fd, master_socket);
-
+	char* 	echo_path = "tmp_echo_file";
 
 	while(1) {
 
@@ -230,15 +226,11 @@ int main (int argc, char* argv[]) {
 		
 		max_sd = master_socket;		
 
-		t_wait.tv_sec = SEC_TIMEOUT; 
-		t_wait.tv_usec = 0;
-
-		/*set valid socket descriptors*/
 		int max_sd_tmp = set_valid_descriptors(&client_socket, MAX_CLIENTS, &readfds);
 		if(max_sd_tmp > max_sd) {
 			max_sd = max_sd_tmp;
 		}		
-		active_fds = select(max_sd + 1, &readfds, NULL, NULL, NULL/*&t_wait*/);
+		active_fds = select(max_sd + 1, &readfds, NULL, NULL, NULL);
 		if(active_fds < 0 && (errno != EINTR)) {
 			printf("Select error!\n");
 			unlink(path);
@@ -246,14 +238,14 @@ int main (int argc, char* argv[]) {
 		}
 			
 		if(FD_ISSET(pipe_fd, &readfds)) {
-			//printf("LOG: caught signal - closing clients\n");
+			printf("LOG: caught signal - closing clients\n");
 			close_clients(&client_socket, MAX_CLIENTS);
 			unlink(path);
 			return 0;
 		}
 
 		if(FD_ISSET(master_socket, &readfds)){
-			printf("LOG: Forwarder accept new socket\n"); /*knocked to server*/
+			printf("LOG: Forwarder accept new socket\n");
 			if((incoming_socket = accept(
 						master_socket, 
 						(struct sockaddr*)&address,
@@ -264,9 +256,11 @@ int main (int argc, char* argv[]) {
 			}
 			/*adding incoming socket*/
 			size_t add_idx = add_new_socket(incoming_socket, &client_socket, MAX_CLIENTS);
-
+			printf("LOG: Forwarder added new socket,\
+client_socket[%u].client_sock = %d\n", add_idx, client_socket[add_idx].client_sock);
+			
 			/*connecting to echo serv*/
-			printf("LOG: Connecting to echo serv\n");
+			printf("LOG: Forwarder connecting to echo serv\n");
 			int echo_sock = socket(AF_UNIX, SOCK_STREAM, 0);
 			if(echo_sock < 0) {
 				perror("Error while socket()\n");
@@ -274,7 +268,7 @@ int main (int argc, char* argv[]) {
 			}
 			struct sockaddr_un echo_address;	
 			memset(&address, 0, sizeof(address));
-			char* echo_path = "tmp_echo_file";
+			
 			address.sun_family = AF_UNIX;
 			strcpy(address.sun_path, echo_path);
 
@@ -282,48 +276,58 @@ int main (int argc, char* argv[]) {
 			int if_connected = connect(echo_sock, (struct sockaddr*)&address,
 									 (socklen_t)addrlen);
 			if(if_connected < 0) {
-				perror("Connection error\n");
+				perror("Connection to echo server error\n");
+				unlink(path);
 				return CONNECT_ERR;
 			}
-			printf("LOG: adding echo socket %u\n", add_idx);
 			client_socket[add_idx].serv_sock = echo_sock;
+			printf("LOG:Forwarder added echo socket client_sockets[%u].serv_sock=%d\n", 
+				add_idx, client_socket[add_idx].serv_sock);
+
 		}
 
 		size_t counter = 0;
 		for(; counter < MAX_CLIENTS; counter++) {
-			sd = client_socket[counter].client_sock; //socket_id
+			sd = client_socket[counter].client_sock; 
 			if(FD_ISSET(sd, &readfds)) {
-				char* read_msg = full_read(sd); //allocs memory for string
-			
+				char* read_msg = full_read(sd); 
+				printf("LOG:Forwarder got from client_socket[%d].client_sock=%d msg = %s\n", 
+									counter, sd, read_msg);
 				/*echo read_msg back*/
-				printf("LOG: forwarder will forward str = %s\n", read_msg);
+				
 				int echo_sock = client_socket[counter].serv_sock;
-				printf("LOG: echo_sock = %d\n", echo_sock);
+				printf("LOG: forwarder will forward str = %s\nto echo server socket client_socket[%d].serv_sock=%d", 
+						read_msg, counter, echo_sock);
+			
 				ssize_t sent_bytes = send(echo_sock, read_msg, strlen(read_msg), 0);
-				printf("forwarder sent to %d echo socket %u bytes\n", 
-								echo_sock, sent_bytes);
+				printf("forwarder sent to echo socket client_socket[%d].serv_sock=%d %u bytes\n", 
+								counter, echo_sock, sent_bytes);
 
 				free(read_msg);
 			}
 
-			int serv_sd = client_socket[counter].serv_sock; //socket_id
+			int serv_sd = client_socket[counter].serv_sock; 
 			if(FD_ISSET(serv_sd, &readfds)) {
-				char* read_msg = full_read(serv_sd); //allocs memory for string
+				char* read_msg = full_read(serv_sd); 
 			
 				/*echo read_msg back*/
-				printf("LOG: forwarder got echo = %s\n", read_msg);
+				printf("LOG: forwarder got echo from server = %s\n", read_msg);
 				int client_sock = client_socket[counter].client_sock;
-				printf("LOG: forwarder gonna send to client socket = %d\n", client_sock);
+				printf(
+				"LOG: forwarder gonna send to client_socket[%d].client_sock=%d msg = %s\n", 
+							counter, client_sock, read_msg);
 				ssize_t sent_bytes = send(client_sock, read_msg, strlen(read_msg), 0);
-				printf("forwarder sent to client socket %d %u bytes\n", 
-					client_sock, sent_bytes);
+				printf("forwarder sent to client_socket[%d]client_sock=%d %u bytes\n", 
+					counter, client_sock, sent_bytes);
 				free(read_msg);
 			}
 		}
 
 			
 	}
+	printf("LOG: unlinking paths\n");
 	unlink(path);
+	unlink(echo_path);
 	return 0;
 }
 
