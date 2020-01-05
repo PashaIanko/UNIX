@@ -375,7 +375,7 @@ int main (int argc, char* argv[]) {
 					msg_len_pair res = prepare_msg(result_msg.msg, client_id);
 					ssize_t sent_bytes = send(forwarder_socket, res.msg, res.len, 0);
 					printf("Demult sent %u bytes to forwarder\n", sent_bytes);
-					pause();
+					//pause();
 					//close(sd);
 					connections[counter].socket = INVALID;
 					connections[counter].client_id = INVALID;

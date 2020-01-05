@@ -250,6 +250,31 @@ int find_socket(client_id_sock* client_id_arr, size_t size, int client_id) {
 	return INVALID;
 }
 
+void set_invalid(client_id_sock* client_id_arr, size_t size, int sock){
+	size_t i = 0;
+	for(;i<size;i++){
+		client_id_sock temp = client_id_arr[i];
+		if(temp.client_sock == sock){
+			client_id_arr[i].client_sock = INVALID;
+			client_id_arr[i].client_id = INVALID;
+			return;
+		}
+	}
+	return;
+}
+
+void set_invalid_sock(int* sock_arr, size_t size, int sock){
+	size_t i = 0;
+	for(;i<size;i++){
+		int temp = sock_arr[i];
+		if(temp == sock){
+			sock_arr[i] = INVALID;
+			return;
+		}
+	}
+	return;
+}
+
 msg_len_pair prepare_msg(char*msg, int client_id) {
 	if(client_id<0 || msg == NULL) {
 		msg_len_pair null;
@@ -355,7 +380,8 @@ int main (int argc, char* argv[]) {
 	demult_address.sun_family = AF_UNIX;
 	strcpy(demult_address.sun_path, demult_path);
 	int demult_addrlen = sizeof(demult_address);
-	int if_connected = connect(demult_sock, (struct sockaddr*)&demult_address, (socklen_t)demult_addrlen);
+	int if_connected = connect(demult_sock, (struct sockaddr*)&demult_address, 
+								(socklen_t)demult_addrlen);
 	if(if_connected < 0) {
 		perror("Connection to demultiplexor error\n");
 		return CONNECT_ERR;
@@ -422,7 +448,10 @@ int main (int argc, char* argv[]) {
 			ssize_t bytes_sent = send(client_sock, result_info.msg, 
 								strlen(result_info.msg),0);
 			printf("Forwarder sent %u bytes\n", bytes_sent);
-			pause();
+//			pause();
+			close(client_sock);
+			set_invalid(client_id_arr, MAX_CLIENTS, client_sock);
+			set_invalid_sock(client_socket, MAX_CLIENTS, client_sock);
 		}
 
 

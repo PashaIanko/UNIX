@@ -19,7 +19,7 @@ int main () {
 	struct sockaddr_un address;
 	int sock = 0, bytes_written = 0;
 
-	char * msg = "I am SECOND client sending this message!";
+	char * msg = "DEF";//"I am SECOND client sending this message!";
 	char * path = "tmp_file"; /*analogical to pipe - communication
 					between server and client*/
 	char buffer[BUF_SIZE] = {0};
