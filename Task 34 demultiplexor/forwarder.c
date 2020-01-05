@@ -157,7 +157,7 @@ int string_terminated(char* buffer, size_t size) {
 	return FALSE_;
 }
 
-char* full_read(int sd){
+char* full_read_client(int sd){
 	char buffer[BUF_SIZE];
 	size_t res_len = BUF_SIZE;
 	size_t how_much_read = 0;
@@ -187,6 +187,48 @@ char* full_read(int sd){
 	return res_ptr;
 }
 
+msg_len_pair full_read(int sd){
+	char buffer[BUF_SIZE];
+	size_t res_len = BUF_SIZE;
+	size_t how_much_read = 0;
+	size_t bytes_read = 0;
+	
+	memset(&buffer, '1', BUF_SIZE);
+	char res_big_buf[BIG_SIZE] = {'\0'}; 
+	char* buf_start = res_big_buf;
+	while(1) {
+		bytes_read = read(sd, buffer, BUF_SIZE);
+		printf("full read: read %u bytes\n", bytes_read);
+		if(bytes_read == 0) {
+			break;
+		}
+		how_much_read += bytes_read;
+		memcpy(res_big_buf, buffer, bytes_read);
+
+		if(string_terminated(buffer, bytes_read + 1)) {
+			printf("LOG: string terminated\n");
+			break;
+		}
+		buf_start += bytes_read;
+	}
+
+	printf("LOG: full read: overall, read %u bytes\n", how_much_read);
+	char* res_ptr = malloc(how_much_read);
+	if(res_ptr != NULL) {
+		memcpy(res_ptr, res_big_buf, how_much_read);
+	}
+	printf("LOG: full read: final message:\n");
+	size_t i = 0;
+	for(;i<how_much_read;i++){
+		printf("%c\n", res_ptr[i]);
+	}
+
+	msg_len_pair result;
+	result.msg = res_ptr;
+	result.len = how_much_read;
+	return result;
+}
+
 
 int find_id(client_id_sock* arr, size_t size, int socket){
 	size_t i=0;
@@ -197,7 +239,16 @@ int find_id(client_id_sock* arr, size_t size, int socket){
 	}
 }
 
-
+int find_socket(client_id_sock* client_id_arr, size_t size, int client_id) {
+	size_t i = 0;
+	for(;i<size;i++){
+		client_id_sock temp = client_id_arr[i];
+		if(temp.client_id == client_id){
+			return temp.client_sock;
+		}
+	}
+	return INVALID;
+}
 
 msg_len_pair prepare_msg(char*msg, int client_id) {
 	if(client_id<0 || msg == NULL) {
@@ -362,8 +413,15 @@ int main (int argc, char* argv[]) {
 
 		if(FD_ISSET(demult_sock, &readfds)){
 			printf("LOG: Forwarder caught message from demultiplexor\n"); 
-			char* read_msg = full_read(demult_sock);
-			//client_id_msg result_info = unpack_frame(read_msg);
+			msg_len_pair read_msg = full_read(demult_sock);
+			client_id_msg result_info = unpack_frame(read_msg);
+			printf("Client id = %d", result_info.client_id);
+			int client_sock = find_socket(client_id_arr, MAX_CLIENTS, result_info.client_id);
+			printf("Forwarder will send msg=%s to client_sock=%d, bytes=%u\n",
+				result_info.msg, client_sock, strlen(result_info.msg));
+			ssize_t bytes_sent = send(client_sock, result_info.msg, 
+								strlen(result_info.msg),0);
+			printf("Forwarder sent %u bytes\n", bytes_sent);
 			pause();
 		}
 
@@ -374,8 +432,8 @@ int main (int argc, char* argv[]) {
 			if(FD_ISSET(sd, &readfds)) {
 				printf("LOG: Forwarder got data to read from client_sock[%u]=%d\n",
 						counter, sd);
-				char* read_msg = full_read(sd);
-//				char* read_msg = read_res.msg; 
+//				msg_len_pair read_res = full_read(sd);
+				char* read_msg = full_read_client(sd); 
 			
 
 				printf("Forwarder will pass str = %s\nto demult_sock=%d,\n", 
