@@ -38,6 +38,11 @@ typedef struct client_id_sock{
 	int client_sock;
 } client_id_sock;
 
+typedef struct client_id_msg{
+	int client_id;
+	char* msg;
+} client_id_msg;
+
 void initialize_sockets(int* ptr, size_t size) {
 	if(ptr) {
 		size_t i = 0;
@@ -93,6 +98,11 @@ size_t add_new_socket(int new_sd, int* client_socket, size_t size) {
 	return (size_t)-1;
 }
 
+typedef struct msg_len_pair {
+	size_t len;
+	char* msg;
+} msg_len_pair;
+
 int fd[2];
 const char* const msg = "Going to quit!";
 void quit(int signal) {
@@ -108,6 +118,32 @@ void close_clients(int* client_socket, size_t size) {
 			close(client_socket[i]);
 		}
 	}
+}
+
+client_id_msg unpack_frame(msg_len_pair pair){
+	char*frame = pair.msg;
+	char* frame_start = strchr(frame, 0x7e);
+	if(frame_start == frame + strlen(frame)) {
+		printf("LOG:msg_unpack:invalid frame!\n");
+	}
+	int client_id;
+	char* offset = frame + 1 + sizeof(int);
+	memcpy(&client_id, frame +1, sizeof(int));
+	printf("LOG: client_id = %d\n", client_id);
+
+	char* frame_end = strchr(offset, 0x7e);
+	size_t msg_len = frame_end - offset;
+	printf("LOG: msg_len = %u", msg_len);
+
+	char* msg = malloc(msg_len*sizeof(char));
+	if(msg!=NULL){
+		memcpy(msg, offset, msg_len);
+		printf("unpack_frame: msg = %s\n", msg);
+	}
+	client_id_msg result;
+	result.client_id = client_id;
+	result.msg = msg;
+	return result;
 }
 
 int string_terminated(char* buffer, size_t size) {
@@ -151,6 +187,7 @@ char* full_read(int sd){
 	return res_ptr;
 }
 
+
 int find_id(client_id_sock* arr, size_t size, int socket){
 	size_t i=0;
 	for(;i<size;i++){
@@ -160,10 +197,7 @@ int find_id(client_id_sock* arr, size_t size, int socket){
 	}
 }
 
-typedef struct msg_len_pair {
-	size_t len;
-	char* msg;
-} msg_len_pair;
+
 
 msg_len_pair prepare_msg(char*msg, int client_id) {
 	if(client_id<0 || msg == NULL) {
@@ -283,6 +317,7 @@ int main (int argc, char* argv[]) {
 		FD_ZERO(&readfds);
 		FD_SET(master_socket, &readfds);
 		FD_SET(pipe_fd, &readfds);
+		FD_SET(demult_sock, &readfds);
 		
 		max_sd = master_socket;		
 
@@ -327,6 +362,9 @@ int main (int argc, char* argv[]) {
 
 		if(FD_ISSET(demult_sock, &readfds)){
 			printf("LOG: Forwarder caught message from demultiplexor\n"); 
+			char* read_msg = full_read(demult_sock);
+			//client_id_msg result_info = unpack_frame(read_msg);
+			pause();
 		}
 
 
@@ -336,7 +374,8 @@ int main (int argc, char* argv[]) {
 			if(FD_ISSET(sd, &readfds)) {
 				printf("LOG: Forwarder got data to read from client_sock[%u]=%d\n",
 						counter, sd);
-				char* read_msg = full_read(sd); 
+				char* read_msg = full_read(sd);
+//				char* read_msg = read_res.msg; 
 			
 
 				printf("Forwarder will pass str = %s\nto demult_sock=%d,\n", 

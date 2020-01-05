@@ -146,6 +146,42 @@ msg_len_pair full_read(int sd){
 	return result;
 }
 
+msg_len_pair prepare_msg(char*msg, int client_id) {
+	if(client_id<0 || msg == NULL) {
+		msg_len_pair null;
+		null.msg = NULL;
+		null.len = 0;
+		return null;
+	}
+	char * buf = malloc(sizeof(char)*BIG_SIZE);
+	size_t i = 0;
+	for (; i<BIG_SIZE;i++){
+		buf[i] = '\0';
+	}
+	
+	
+	buf[0] = 0x7e;
+	printf("LOG: before adding int buf=%s\n", buf);
+	char* temp = memcpy(buf + 1, &client_id, sizeof(int));
+	printf("LOG: after adding int buf = %s, buf[0]=%c\n", buf, buf[0]);	
+
+	strcat(&buf[5], msg);
+	buf[1+sizeof(int) + strlen(msg)] = 0x7e;
+	//printf("final frame, buf = %s\n", buf);
+
+	for(i=0;i<2+sizeof(int) + strlen(msg);++i){
+		printf("%c\n", buf[i]);
+	}
+
+	size_t msg_len=2+sizeof(int) + strlen(msg);
+	printf("strlen(msg) = %u, msg_len = %u\n", strlen(msg), msg_len);
+	//free(msg);
+	struct msg_len_pair res;
+	res.len = msg_len;
+	res.msg = buf;
+	return res;
+}
+
 int create_session(char*path) {
 	
 	int echo_sock = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -193,6 +229,18 @@ void init_connections(sock_id_msg* connections, size_t size){
 	}
 }
 
+int find_id(sock_id_msg* connections, size_t size, int sock){
+	size_t i = 0;
+	for(;i<size;i++){
+		sock_id_msg temp = connections[i];
+		if(temp.socket == sock){
+			return temp.client_id;
+		}
+	}
+	printf("Could not find the client id\n");
+	return -1;
+}
+
 int main (int argc, char* argv[]) {
 
 	fd_set	readfds;
@@ -232,6 +280,7 @@ int main (int argc, char* argv[]) {
 	int addrlen = sizeof(address);
 	int max_sd = listener_socket;
 	char* 	echo_path = "tmp_echo_file";
+	int forwarder_socket=0;
 	sock_id_msg connections[MAX_CONNECTIONS];
 	init_connections(connections, MAX_CONNECTIONS);
 	while(1) {
@@ -275,6 +324,7 @@ int main (int argc, char* argv[]) {
 			size_t add_idx = add_new_socket(info_to_add, &connections, MAX_CONNECTIONS);
 			printf("LOG: demultiplexor added new client at connections[%u].socket=%d\n",
 				add_idx, connections[add_idx].socket);
+			forwarder_socket = incoming_socket;
 		}
 
 
@@ -290,7 +340,7 @@ int main (int argc, char* argv[]) {
 					printf("LOG:this msg is from forwarder\n");
 					//pause();
 
-					msg_len_pair result_msg = full_read(max_sd);  
+					msg_len_pair result_msg = full_read(sd);  
 
 					sock_id_msg result_info = unpack_frame(result_msg);
 					int client_id = result_info.client_id;
@@ -308,29 +358,34 @@ int main (int argc, char* argv[]) {
 					printf(
 					"Added new connection with server, connections[%u].socket=%d\n", 					
 					added_idx, connections[added_idx].socket);
+					printf("Demultiplexor sends to echo_sock=%d message %s\n",
+											echo_sock, msg);
+					ssize_t sent_bytes = send(echo_sock, msg, strlen(msg), 0);
+					printf("Demultiplexor sent %u bytes\n", sent_bytes);
 					//close(sd);
 					//client_socket[counter] = INVALID;
 					free(msg);
 				}
+				else{
+					printf("LOG:this msg is from server\n");
+					msg_len_pair result_msg = full_read(sd);  
+					printf("Demult got msg=%s from server\n", result_msg.msg);
+					int client_id = find_id(connections, MAX_CONNECTIONS, sd);
+					printf("Demult will make frame for client_id=%d\n", client_id);
+					msg_len_pair res = prepare_msg(result_msg.msg, client_id);
+					ssize_t sent_bytes = send(forwarder_socket, res.msg, res.len, 0);
+					printf("Demult sent %u bytes to forwarder\n", sent_bytes);
+					pause();
+					//close(sd);
+					connections[counter].socket = INVALID;
+					connections[counter].client_id = INVALID;
+					free(connections[counter].msg);
+					connections[counter].msg = NULL;
+				}
 				
 			}
 		}
-
-		/*if(FD_ISSET(listener_socket, &readfds)){
-			printf("LOG: Demultiplexor caught data to read from forwarder\n");
-			msg_len_pair result_msg = full_read(max_sd); 
-			sock_id_msg result_info = unpack_frame(result_msg);
-			int client_id = result_info.client_id;
-			char* msg = result_info.msg;
-			printf("LOG:Demultiplexor creates session with server\n");
-			int echo_sock = create_session(echo_path);
-			if(echo_sock == SOCKET_ERR || echo_sock == CONNECT_ERR){
-				printf("Error while creating session\n");
-			}
-			result_info.socket = echo_sock;
-			printf("LOG:result info:\nclient_id=%d\nmsg=%s\nsock with server=%d\n",
-				client_id, msg, echo_sock);
-		}*/
+		
 	}
 	unlink(echo_path);
 	return 0;

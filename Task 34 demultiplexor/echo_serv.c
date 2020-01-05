@@ -198,7 +198,6 @@ int main (int argc, char* argv[]) {
 	/*setting handler*/
 	signal (SIGINT, quit);	
 
-	printf("Echo server waiting for clients\n");		
 	int	max_sd; 
 	int	sd; 
 	int	active_fds;
@@ -222,7 +221,7 @@ int main (int argc, char* argv[]) {
 		if(max_sd_tmp > max_sd) {
 			max_sd = max_sd_tmp;
 		}	
-		printf("LOG: echo_serv waiting for clients");	
+		printf("LOG: echo_serv waiting for clients\n");	
 		active_fds = select(max_sd + 1, &readfds, NULL, NULL, NULL);
 		if(active_fds < 0 && (errno != EINTR)) {
 			printf("Select error!\n");
